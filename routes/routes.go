@@ -13,5 +13,22 @@ func AuthRoutes(r *gin.Engine) {
 
 	api := r.Group("/api")
 	api.Use(middlewares.JWTAuthMiddleware()) // Only authenticated
+
+
+	{
+		
+		user := api.Group("/user")
+		user.Use(middlewares.RoleMiddleware("User"))
+		{
+			user.GET("/dashboard", controllers.UserDashboard)
+		}
+
+		admin := api.Group("/admin")
+		admin.Use(middlewares.RoleMiddleware("Admin"))
+		{
+			admin.GET("/dashboard", controllers.AdminDashboard)
+		}
+	}
+
 	
 }

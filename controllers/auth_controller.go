@@ -98,3 +98,16 @@ func Login(c *gin.Context) {
 
     c.JSON(http.StatusOK, gin.H{"token": token})
 }
+
+
+func AdminDashboard(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{"message": "Welcome Admin!"})
+}
+
+
+func UserDashboard(c *gin.Context) {
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Welcome to the User Dashboard!",
+    })
+}
+
