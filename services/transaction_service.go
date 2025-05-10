@@ -6,6 +6,7 @@ import (
 	"bank/websocket"
 	"errors"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -100,3 +101,38 @@ func MoneyTransfer(tx *models.Transaction) error {
 	})
 }
 
+func MoneyRequest(request *models.MoneyRequest) error {
+	database := db.DB
+
+	// Optional validation checks
+	if request.Amount <= 0 {
+		return errors.New("invalid amount")
+	}
+    
+ 	if request.RequesterID == request.RecipientID {
+		fmt.Println("Requester and recipient cannot be the same", request.RequesterID, request.RecipientID)
+		return errors.New("cannot request from self")
+	}
+
+	request.Status = "PENDING"
+	request.ExpiresAt = time.Now().Add(24 * time.Hour) // auto-expiry in 24h
+
+	if err := database.Create(&request).Error; err != nil {
+		return err
+	}
+
+	//  Get UserID of RecipientID (assuming RecipientID is an account number)
+	var recipientAccount models.Account
+	if err := database.First(&recipientAccount, "account_number = ?", request.RecipientID).Error; err != nil {
+		return fmt.Errorf("recipient account not found: %v", err)
+	}
+
+	// Notify recipient via WebSocket
+	message := fmt.Sprintf("User %v requested %.2f from you", request.RequesterID, request.Amount)
+	websocket.NotifyChan <- websocket.NotificationMessage{
+		UserID:  recipientAccount.UserID,
+		Message: message,
+	}
+
+	return nil
+}
