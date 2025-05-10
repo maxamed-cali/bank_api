@@ -41,6 +41,7 @@ func Connect() {
         &models.UserRole{},
         &models.Account{},
         &models.AccountType{},
+        &models.Transaction{},
         
     )
     if err != nil {
