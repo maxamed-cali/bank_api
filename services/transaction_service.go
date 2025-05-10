@@ -136,3 +136,31 @@ func MoneyRequest(request *models.MoneyRequest) error {
 
 	return nil
 }
+
+func AcceptMoneyRequest(requestID uint) error {
+	database := db.DB
+
+	var req models.MoneyRequest
+	if err := database.First(&req, requestID).Error; err != nil {
+		return err
+	}
+
+	if req.Status != "PENDING" {
+		return errors.New("request is no longer active")
+	}
+
+	// Mark accepted before transfer (to avoid double execution)
+	req.Status = "ACCEPTED"
+	if err := database.Save(&req).Error; err != nil {
+		return err
+	}
+
+	// Perform fund transfer
+	tx := &models.Transaction{
+		AccountID:    req.RecipientID,
+		ToAccountID:  &req.RequesterID,
+		Amount:       req.Amount,
+		Description:  fmt.Sprintf("Accepted request ID %d", req.ID),
+	}
+	return MoneyTransfer(tx)
+}

@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"bank/models"
 	"bank/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 
@@ -45,4 +47,14 @@ func MoneyRequest(c *gin.Context) {
 		"message":     "Money Requst successful",
 		"Money": mr,
 	})
+}
+
+func AcceptMoneyRequest(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	 err := services.AcceptMoneyRequest(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Accepted"})
 }

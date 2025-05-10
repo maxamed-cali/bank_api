@@ -34,6 +34,7 @@ func AuthRoutes(r *gin.Engine) {
 			user.DELETE("/account-types/:id", controllers.DeleteAccountType)
          	user.POST("/money-transer", controllers.MoneyTransfer)
 			user.POST("/money-request", controllers.MoneyRequest)
+			user.PUT("/accept-money-request/:id", controllers.AcceptMoneyRequest)
 			user.GET("/dashboard", controllers.UserDashboard)
 		}
 
