@@ -164,3 +164,75 @@ func AcceptMoneyRequest(requestID uint) error {
 	}
 	return MoneyTransfer(tx)
 }
+
+
+func DeclineMoneyRequest(requestID uint) error {
+	database := db.DB
+
+	var req models.MoneyRequest
+	if err := database.First(&req, requestID).Error; err != nil {
+		return err
+	}
+
+	if req.Status != "PENDING" {
+		return errors.New("request is no longer active")
+	}
+
+	req.Status = "DECLINED"
+	if err := database.Save(&req).Error; err != nil {
+		return err
+	}
+
+	//  Get UserID of RecipientID (assuming RecipientID is an account number)
+	var requesterAccount models.Account
+	if err := database.First(&requesterAccount, "account_number = ?", req.RequesterID).Error; err != nil {
+		return fmt.Errorf("recipient account not found: %v", err)
+	}
+
+	// Send WebSocket notification
+	message := fmt.Sprintf("Your money request (ID %d) was declined", req.ID)
+	websocket.NotifyChan <- websocket.NotificationMessage{
+		UserID:  requesterAccount.UserID,
+		Message: message,
+	}
+
+	return nil
+}
+	
+
+
+func AutoExpireRequests() {
+	database := db.DB
+
+	var expiredRequests []models.MoneyRequest
+	fmt.Println("Checking for expired requests...",time.Now())
+	if err := database.
+		Where("status = ? ", "PENDING").
+		Find(&expiredRequests).Error; err != nil {
+		fmt.Println("Failed to fetch expired requests:", err)
+		return
+	}
+
+	for _, req := range expiredRequests {
+    req.Status = "EXPIRED"
+    if err := database.Save(&req).Error; err != nil {
+        fmt.Printf("Failed to update request ID %d: %v\n", req.ID, err)
+        continue
+    }
+
+    // Find the requester account
+    var requesterAccount models.Account
+    if err := database.First(&requesterAccount, "account_number = ?", req.RequesterID).Error; err != nil {
+        fmt.Printf("Requester account not found for request ID %d: %v\n", req.ID, err)
+        continue
+    }
+
+    // Send WebSocket notification
+    message := fmt.Sprintf("Your money request (Account %v) has expired", requesterAccount.AccountNumber)
+    websocket.NotifyChan <- websocket.NotificationMessage{
+        UserID:  requesterAccount.UserID,
+        Message: message,
+    }
+}
+
+}

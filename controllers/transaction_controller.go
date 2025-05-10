@@ -58,3 +58,13 @@ func AcceptMoneyRequest(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Accepted"})
 }
+
+func DeclineMoneyRequest(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	 err := services.DeclineMoneyRequest(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Declined"})
+}
