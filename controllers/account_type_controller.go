@@ -48,7 +48,7 @@ func UpdateAccountType(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := services.UpdateAccountType(uint(id), body); err != nil {
+	if err := services.UpdateAccountType(uint(id), &body); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

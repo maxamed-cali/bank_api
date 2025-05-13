@@ -1,54 +1,45 @@
 package db
 
 import (
-	"bank/models"
-	"fmt"
-	"log"
-	"os"
+    "database/sql"
+    "fmt"
+    "log"
+    "os"
 
-	"github.com/joho/godotenv"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+    "github.com/joho/godotenv"
+    _"github.com/lib/pq" // PostgreSQL driver
 )
 
-var DB *gorm.DB
+var DB *sql.DB
 
 func Connect() {
-
-    errs := godotenv.Load()
-    if errs != nil {
+    // Load environment variables
+    err := godotenv.Load()
+    if err != nil {
         log.Fatal("Error loading .env file")
     }
-	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_PORT"),
-	)
 
-	var err error
-    DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    // Format DSN
+    dsn := fmt.Sprintf(
+        "host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+        os.Getenv("DB_HOST"),
+        os.Getenv("DB_USER"),
+        os.Getenv("DB_PASSWORD"),
+        os.Getenv("DB_NAME"),
+        os.Getenv("DB_PORT"),
+    )
+
+    // Open database connection
+    DB, err = sql.Open("postgres", dsn)
+    if err != nil {
+        log.Fatal("Failed to open database connection:", err)
+    }
+
+    // Test the connection
+    err = DB.Ping()
     if err != nil {
         log.Fatal("Failed to connect to database:", err)
     }
 
-    // Auto-migrate models
-    err = DB.AutoMigrate(
-        &models.Credential{},
-        &models.Role{},
-        &models.UserRole{},
-        &models.Account{},
-        &models.AccountType{},
-        &models.Transaction{},
-        &models.MoneyRequest{},
-        &models.Notification{},
-        
-    )
-    if err != nil {
-        log.Fatal("Failed to auto migrate:", err)
-    }
+    fmt.Println("Database connection established using raw SQL")
 }
-
-

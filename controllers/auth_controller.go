@@ -8,14 +8,7 @@ import (
 	"net/http"
 )
 
-type RegisterInput struct {
-	FullName string `json:"full_name" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Phone    string `json:"phone_number"`
-	Address  string `json:"address"`
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
+
 
 type LoginInput struct {
 	Username string `json:"username" binding:"required"`
@@ -25,6 +18,14 @@ type LoginInput struct {
 type PasswordResetInput struct {
 	OldPassword string `json:"old_password" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required"`
+}
+type RegisterInput struct {
+	FullName string `json:"full_name" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Phone    string `json:"phone_number"`
+	Address  string `json:"address"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 func Register(c *gin.Context) {

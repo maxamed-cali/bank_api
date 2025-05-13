@@ -9,68 +9,55 @@ import (
 	"bank/services"
 )
 
-// Create wallet handler
-func CreateWallet(c *gin.Context) {
-	var wallet models.Account
-	if err := c.ShouldBindJSON(&wallet); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := services.CreateWallet(&wallet); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, wallet)
-}
-
-// Delete wallet handler
-func DeleteWallet(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if err := services.DeleteWallet(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Wallet deleted"})
-}
-
-// Rename wallet
-func RenameWallet(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	var body struct {
-		NewAccountNumber string `json:"new_account_number"`
-	}
+func CreateAccount(c *gin.Context) {
+	var body models.Account
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := services.RenameWallet(uint(id), body.NewAccountNumber); err != nil {
+	if err := services.CreateAccount(&body); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "Wallet renamed"})
+	c.JSON(http.StatusCreated, body)
 }
-
-
-func ViewBalances(c *gin.Context) {
-	accountNumber := c.Param("accountNumber") 
-	balance, err := services.GetBalanceByAccountNumber(accountNumber)
+func GetAllAccounts(c *gin.Context) {
+	accounts, err := services.GetAllAccounts()
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Account not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch accounts"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"account_number": accountNumber,
-		"balance":        balance,
-	})
+	c.JSON(http.StatusOK, accounts)
+}
+func GetAccountByID(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	acc, err := services.GetAccountByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	c.JSON(http.StatusOK, acc)
 }
 
-
-// View balances by currency
-func HandleGetBalance(c *gin.Context) {
-	result, err := services.GetBalancesGroupedByCurrency()
-	if err != nil {
+func UpdateAccount(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var body models.Account
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := services.UpdateAccount(uint(id), &body); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{"message": "Updated"})
+}
+
+func DeleteAccount(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := services.DeleteAccount(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
 }

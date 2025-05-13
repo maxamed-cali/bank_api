@@ -3,84 +3,182 @@ package services
 import (
 	"bank/db"
 	"bank/models"
+	"database/sql"
 	"errors"
+	"fmt"
+	"time"
+
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 // Register user, credentials, and role
 func RegisterUser(input models.User, username, password string) error {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
+    // Hash the password
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    if err != nil {
+        return err
+    }
 
-	if err := db.DB.Create(&input).Error; err != nil {
-		return err
-	}
+    // Begin a transaction
+    tx, err := db.DB.Begin()
+    if err != nil {
+        return err
+    }
 
-	cred := models.Credential{
-		UserID:       input.ID,
-		Username:     username,
-		PasswordHash: string(hashedPassword),
-	}
-	if err := db.DB.Create(&cred).Error; err != nil {
-		return err
-	}
+    defer func() {
+        if err != nil {
+            tx.Rollback()
+        } else {
+            tx.Commit()
+        }
+    }()
 
-	var role models.Role
-	db.DB.Where("name = ?", "User").FirstOrCreate(&role, models.Role{Name: "User"})
+    // Insert into users table and get ID
+    var userID int
+    query := `INSERT INTO users (full_name, email, phone_number, address,created_at) VALUES ($1, $2, $3,$4,$5) RETURNING id`
+    err = tx.QueryRow(query, input.FullName, input.Email, input.PhoneNumber,input.Address,time.Now()).Scan(&userID)
+    if err != nil {
+        return fmt.Errorf("failed to insert user: %v", err)
+    }
 
-	return db.DB.Create(&models.UserRole{
-		UserID: input.ID,
-		RoleID: role.ID,
-	}).Error
+    // Insert into credentials table
+    _, err = tx.Exec(
+        `INSERT INTO credentials (user_id, username, password_hash,created_at) VALUES ($1, $2, $3,$4)`,
+        userID, username, string(hashedPassword),time.Now(),
+    )
+    if err != nil {
+        return fmt.Errorf("failed to insert credentials: %v", err)
+    }
+
+    // Check if "User" role exists, if not create it
+    var roleID int
+    err = tx.QueryRow(`SELECT id FROM roles WHERE name = 'User'`).Scan(&roleID)
+    if err == sql.ErrNoRows {
+        err = tx.QueryRow(
+    `INSERT INTO roles (name, created_at) VALUES ($1, $2) RETURNING id`,
+    "User",
+    time.Now(),
+).Scan(&roleID)
+        if err != nil {
+            return fmt.Errorf("failed to insert default role: %v", err)
+        }
+    } else if err != nil {
+        return fmt.Errorf("failed to query role: %v", err)
+    }
+
+    // Insert into user_roles table
+    _, err = tx.Exec(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, userID, roleID)
+    if err != nil {
+        return fmt.Errorf("failed to assign user role: %v", err)
+    }
+
+    return nil
 }
 
 // Authenticate username & password and return userID + role
 func Authenticate(username, password string) (uint, string, error) {
-	var cred models.Credential
-	if err := db.DB.Where("username = ?", username).First(&cred).Error; err != nil {
-		return 0, "", errors.New("invalid username or password")
-	}
+    var userID uint
+    var passwordHash string
 
-	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(password)); err != nil {
-		return 0, "", errors.New("invalid username or password")
-	}
+    // Step 1: Find user credentials
+    err := db.DB.QueryRow(`
+        SELECT user_id, password_hash FROM credentials WHERE username = $1
+    `, username).Scan(&userID, &passwordHash)
+    if err == sql.ErrNoRows {
+        return 0, "", errors.New("invalid credentials")
+    } else if err != nil {
+        return 0, "", err
+    }
 
-	var userRole models.UserRole
-	if err := db.DB.Where("user_id = ?", cred.UserID).First(&userRole).Error; err != nil {
-		return 0, "", errors.New("user role not found")
-	}
+    // Step 2: Compare password
+    if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
+        return 0, "", errors.New("invalid credentials")
+    }
 
-	var role models.Role
-	if err := db.DB.First(&role, userRole.RoleID).Error; err != nil {
-		return 0, "", errors.New("role not found")
-	}
+    // Step 3: Find user role
+    var roleID uint
+    err = db.DB.QueryRow(`
+        SELECT role_id FROM user_roles WHERE user_id = $1
+    `, userID).Scan(&roleID)
+    if err == sql.ErrNoRows {
+        return 0, "", errors.New("user role not found")
+    } else if err != nil {
+        return 0, "", err
+    }
 
-	return cred.UserID, role.Name, nil
+    // Step 4: Get role name
+    var roleName string
+    err = db.DB.QueryRow(`
+        SELECT name FROM roles WHERE id = $1
+    `, roleID).Scan(&roleName)
+    if err == sql.ErrNoRows {
+        return 0, "", errors.New("role not found")
+    } else if err != nil {
+        return 0, "", err
+    }
+
+    return userID, roleName, nil
 }
 
 // Reset password
 func ResetUserPassword(userID uint, oldPwd, newPwd string) error {
-	var cred models.Credential
-	if err := db.DB.Where("user_id = ?", userID).First(&cred).Error; err != nil {
-		return gorm.ErrRecordNotFound
-	}
+    // Step 1: Retrieve the current password hash for the user
+    var passwordHash string
+    err := db.DB.QueryRow(`
+        SELECT password_hash FROM credentials WHERE user_id = $1
+    `, userID).Scan(&passwordHash)
+    if err == sql.ErrNoRows {
+        return errors.New("user not found")
+    } else if err != nil {
+        return err
+    }
 
-	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(oldPwd)); err != nil {
-		return errors.New("old password incorrect")
-	}
+    // Step 2: Compare the provided old password with the stored password hash
+    if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(oldPwd)); err != nil {
+        return errors.New("old password incorrect")
+    }
 
-	hashedNew, _ := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
-	cred.PasswordHash = string(hashedNew)
+    // Step 3: Hash the new password
+    hashedNew, err := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
+    if err != nil {
+        return err
+    }
 
-	return db.DB.Save(&cred).Error
+    // Step 4: Update the password hash in the database
+    _, err = db.DB.Exec(`
+        UPDATE credentials
+        SET password_hash = $1
+        WHERE user_id = $2
+    `, string(hashedNew), userID)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
-
 // Get user profile
 func GetUserByID(userID uint) (models.User, error) {
-	var user models.User
-	err := db.DB.First(&user, userID).Error
-	return user, err
+    var user models.User
+
+    row := db.DB.QueryRow(`
+        SELECT id, name, email, phone, created_at, 
+        FROM users
+        WHERE id = $1`, userID)
+
+    err := row.Scan(
+        &user.ID,
+        &user.FullName,
+        &user.Email,
+        &user.PhoneNumber,
+        &user.CreatedAt,
+       
+    )
+
+    if err == sql.ErrNoRows {
+        return user, errors.New("user not found")
+    } else if err != nil {
+        return user, err
+    }
+
+    return user, nil
 }

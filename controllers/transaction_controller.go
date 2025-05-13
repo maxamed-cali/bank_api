@@ -68,3 +68,33 @@ func DeclineMoneyRequest(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Declined"})
 }
+
+func GetTransactionByID(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	tx, err := services.GetTransactionByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	c.JSON(http.StatusOK, tx)
+}
+
+func GetAllTransactions(c *gin.Context) {
+	txs, err := services.GetAllTransactions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
+		return
+	}
+	c.JSON(http.StatusOK, txs)
+}
+
+
+
+func DeleteTransaction(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := services.DeleteTransaction(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+}

@@ -22,11 +22,11 @@ func AuthRoutes(r *gin.Engine) {
 		{
  
 			user.POST("/password-reset", controllers.ResetPassword)
-			user.POST("/account", controllers.CreateWallet)
-			user.GET("/account/:accountNumber", controllers.ViewBalances)
-			user.PUT("/account/:id", controllers.RenameWallet)
-			user.DELETE("/account/:id", controllers.DeleteWallet)
-			user.GET("/account", controllers.HandleGetBalance)
+			user.POST("/account", controllers.CreateAccount)
+			//user.GET("/account/:accountNumber", controllers.ViewBalances)
+			user.PUT("/account/:id", controllers.UpdateAccount)
+			user.DELETE("/account/:id", controllers.DeleteAccount)
+			
 			user.POST("/account-types", controllers.CreateAccountType)
 			user.GET("/account-types", controllers.GetAllAccountTypes)
 			user.GET("/account-types/:id", controllers.GetAccountTypeByID)
@@ -37,13 +37,18 @@ func AuthRoutes(r *gin.Engine) {
 			user.PUT("/accept-money-request/:id", controllers.AcceptMoneyRequest)
 			user.PUT("/decline-money-request/:id", controllers.DeclineMoneyRequest)
 			user.GET("/dashboard", controllers.UserDashboard)
+
 		}
 
 		admin := api.Group("/admin")
 		admin.Use(middlewares.RoleMiddleware("Admin"))
 		{
 			admin.GET("/dashboard", controllers.AdminDashboard)
+			admin.POST("/assign-roles", controllers.AssignRoles)
+			admin.POST("/create-role", controllers.CreateRole)
+			admin.GET("/audit-logs", controllers.GetAuditLogs)
 
+			
 		}
 	}
 
