@@ -22,10 +22,11 @@ func AuthRoutes(r *gin.Engine) {
 		{
  
 			user.POST("/password-reset", controllers.ResetPassword)
-			user.POST("/account", controllers.CreateAccount)
+			user.POST("/accounts", controllers.CreateAccount)
 			//user.GET("/account/:accountNumber", controllers.ViewBalances)
-			user.PUT("/account/:id", controllers.UpdateAccount)
-			user.DELETE("/account/:id", controllers.DeleteAccount)
+			user.PUT("/accounts/:id", controllers.UpdateAccount)
+			user.GET("/accounts/", controllers.GetAllAccounts)
+			user.DELETE("/accounts/:id", controllers.DeleteAccount)
 			
 			user.POST("/account-types", controllers.CreateAccountType)
 			user.GET("/account-types", controllers.GetAllAccountTypes)
