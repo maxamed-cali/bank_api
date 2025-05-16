@@ -23,9 +23,9 @@ func AuthRoutes(r *gin.Engine) {
  
 			user.POST("/password-reset", controllers.ResetPassword)
 			user.POST("/accounts", controllers.CreateAccount)
-			//user.GET("/account/:accountNumber", controllers.ViewBalances)
 			user.PUT("/accounts/:id", controllers.UpdateAccount)
 			user.GET("/accounts/", controllers.GetAllAccounts)
+			user.GET("/account-blance/:id", controllers.GetAccountsBalance)
 			user.DELETE("/accounts/:id", controllers.DeleteAccount)
 			
 			user.POST("/account-types", controllers.CreateAccountType)
@@ -33,7 +33,9 @@ func AuthRoutes(r *gin.Engine) {
 			user.GET("/account-types/:id", controllers.GetAccountTypeByID)
 			user.PUT("/account-types/:id", controllers.UpdateAccountType)
 			user.DELETE("/account-types/:id", controllers.DeleteAccountType)
+			
          	user.POST("/money-transer", controllers.MoneyTransfer)
+			user.GET("/transactions/history", controllers.GetTransactionHistoryHandler)
 			user.POST("/money-request", controllers.MoneyRequest)
 			user.PUT("/accept-money-request/:id", controllers.AcceptMoneyRequest)
 			user.PUT("/decline-money-request/:id", controllers.DeclineMoneyRequest)
@@ -46,6 +48,7 @@ func AuthRoutes(r *gin.Engine) {
 		{
 			admin.GET("/dashboard", controllers.AdminDashboard)
 			admin.POST("/assign-roles", controllers.AssignRoles)
+			admin.PATCH("/users/:id/status", controllers.ActivateDeactivateUser)
 			admin.POST("/create-role", controllers.CreateRole)
 			admin.GET("/audit-logs", controllers.GetAuditLogs)
 

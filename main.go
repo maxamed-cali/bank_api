@@ -5,21 +5,32 @@ import (
 	"bank/jobs"
 	"bank/routes"
 	"bank/websocket"
+	"log"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-
-// Start WebSocket dispatcher
-    jobs.StartAutoExpireJob()
-    websocket.StartDispatcher()
-
-	r:=gin.Default();
+	// Initialize Database Connection
 	db.Connect()
+
+	// Run Migrations Before Starting Server
+	if err := db.RunMigrations(db.GetDB()); err != nil {
+		log.Fatalf("Migration failed: %v", err)
+	}
+
+	// Start Background Jobs and WebSocket Dispatcher
+	jobs.StartAutoExpireJob()
+	websocket.StartDispatcher()
+
+	// Set up Gin Router
+	r := gin.Default()
+
+	// Register Routes
 	routes.AuthRoutes(r)
 
-	r.Run(":8080") // listen and serve on
-
-
+	// Start HTTP Server
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }

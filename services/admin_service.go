@@ -4,13 +4,14 @@ import (
 	"bank/db"
 	"bank/models"
 	"errors"
+	"fmt"
 
 	"github.com/lib/pq"
 )
 
 // List all users
 func ListAllUsers() ([]models.User, error) {
-	query := `SELECT id, full_name, email, phone_number, address FROM users`
+	query := `SELECT id, full_name,  phone_number, address FROM users`
 
 	rows, err := db.DB.Query(query)
 	if err != nil {
@@ -22,7 +23,7 @@ func ListAllUsers() ([]models.User, error) {
 
 	for rows.Next() {
 		var user models.User
-		err := rows.Scan(&user.ID, &user.FullName, &user.Email, &user.PhoneNumber, &user.Address)
+		err := rows.Scan(&user.ID, &user.FullName,  &user.PhoneNumber, &user.Address)
 		if err != nil {
 			return nil, err
 		}
@@ -131,5 +132,29 @@ func AssignRolesToUser(userID uint, roleNames []string) error {
 	}
 
 	return tx.Commit()
+}
+
+
+// ToggleUserStatus updates the active status of a user.
+func ActivateDeactivateUser(userID uint, isActive bool) error {
+	query := `UPDATE users SET is_active = $1 WHERE id = $2`
+	result, err := db.GetDB().Exec(query, isActive, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("user with ID %d not found", userID)
+	}
+
+	// Log the action
+	status := "deactivated"
+	if isActive {
+		status = "activated"
+	}
+	_ = LogAudit(&userID, "UPDATE", "users", userID, fmt.Sprintf("User %d %s", userID, status))
+
+	return nil
 }
 

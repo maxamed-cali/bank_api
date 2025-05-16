@@ -11,7 +11,7 @@ import (
 
 
 type LoginInput struct {
-	Username string `json:"username" binding:"required"`
+	Email string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -24,7 +24,6 @@ type RegisterInput struct {
 	Email    string `json:"email" binding:"required,email"`
 	Phone    string `json:"phone_number"`
 	Address  string `json:"address"`
-	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -37,12 +36,11 @@ func Register(c *gin.Context) {
 
 	user := models.User{
 		FullName:    input.FullName,
-		Email:       input.Email,
 		PhoneNumber: input.Phone,
 		Address:     input.Address,
 	}
 
-	if err := services.RegisterUser(user, input.Username, input.Password); err != nil {
+	if err := services.RegisterUser(user, input.Email, input.Password); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -57,7 +55,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	userID, role, err := services.Authenticate(input.Username, input.Password)
+	userID, role, err := services.Authenticate(input.Email, input.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return

@@ -12,7 +12,7 @@ import (
 )
 
 // Register user, credentials, and role
-func RegisterUser(input models.User, username, password string) error {
+func RegisterUser(input models.User, email, password string) error {
     // Hash the password
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
     if err != nil {
@@ -35,16 +35,16 @@ func RegisterUser(input models.User, username, password string) error {
 
     // Insert into users table and get ID
     var userID int
-    query := `INSERT INTO users (full_name, email, phone_number, address,created_at) VALUES ($1, $2, $3,$4,$5) RETURNING id`
-    err = tx.QueryRow(query, input.FullName, input.Email, input.PhoneNumber,input.Address,time.Now()).Scan(&userID)
+    query := `INSERT INTO users (full_name,  phone_number, address,created_at) VALUES ($1, $2, $3,$4) RETURNING id`
+    err = tx.QueryRow(query, input.FullName,  input.PhoneNumber,input.Address,time.Now()).Scan(&userID)
     if err != nil {
         return fmt.Errorf("failed to insert user: %v", err)
     }
 
     // Insert into credentials table
     _, err = tx.Exec(
-        `INSERT INTO credentials (user_id, username, password_hash,created_at) VALUES ($1, $2, $3,$4)`,
-        userID, username, string(hashedPassword),time.Now(),
+        `INSERT INTO credentials (user_id, email, password_hash,created_at) VALUES ($1, $2, $3,$4)`,
+        userID, email, string(hashedPassword),time.Now(),
     )
     if err != nil {
         return fmt.Errorf("failed to insert credentials: %v", err)
@@ -75,24 +75,24 @@ func RegisterUser(input models.User, username, password string) error {
     return nil
 }
 
-// Authenticate username & password and return userID + role
-func Authenticate(username, password string) (uint, string, error) {
+// Authenticate email & password and return userID + role
+func Authenticate(email, password string) (uint, string, error) {
     var userID uint
     var passwordHash string
 
     // Step 1: Find user credentials
     err := db.DB.QueryRow(`
-        SELECT user_id, password_hash FROM credentials WHERE username = $1
-    `, username).Scan(&userID, &passwordHash)
+        SELECT user_id, password_hash FROM credentials WHERE email = $1
+    `, email).Scan(&userID, &passwordHash)
     if err == sql.ErrNoRows {
-        return 0, "", errors.New("invalid credentials")
+        return 0, "", errors.New("invalid credentials Of email")
     } else if err != nil {
         return 0, "", err
     }
 
     // Step 2: Compare password
     if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
-        return 0, "", errors.New("invalid credentials")
+        return 0, "", errors.New("invalid credentials of password")
     }
 
     // Step 3: Find user role
@@ -161,14 +161,14 @@ func GetUserByID(userID uint) (models.User, error) {
     var user models.User
 
     row := db.DB.QueryRow(`
-        SELECT id, name, email, phone, created_at, 
+        SELECT id, name,  phone, created_at, 
         FROM users
         WHERE id = $1`, userID)
 
     err := row.Scan(
         &user.ID,
         &user.FullName,
-        &user.Email,
+      
         &user.PhoneNumber,
         &user.CreatedAt,
        

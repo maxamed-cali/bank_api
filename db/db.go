@@ -43,3 +43,10 @@ func Connect() {
 
     fmt.Println("Database connection established using raw SQL")
 }
+
+func GetDB() *sql.DB {
+	if DB == nil {
+		log.Fatal("Database not connected. Call db.Connect() first.")
+	}
+	return DB
+}

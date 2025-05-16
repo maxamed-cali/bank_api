@@ -4,7 +4,7 @@ import "time"
 
 type MoneyRequest struct {
 	ID          uint       `gorm:"primaryKey"`
-	// UserID       uint      `gorm:"uniqueIndex" json:"user_id"` // one-to-one
+    UserID       uint      `gorm:"uniqueIndex" json:"user_id"` // one-to-one
 	RequesterID string      `gorm:"not null" json:"requester_id"` // who is requesting the money
 	RecipientID string       `gorm:"not null" json:"recipient_id"`  // who is being asked to send money
 	Amount      float64    `gorm:"not null"`

@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"bank/models"
 	"bank/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 func CreateAccount(c *gin.Context) {
@@ -23,6 +24,17 @@ func CreateAccount(c *gin.Context) {
 }
 func GetAllAccounts(c *gin.Context) {
 	accounts, err := services.GetAllAccounts()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch accounts"})
+		return
+	}
+	c.JSON(http.StatusOK, accounts)
+}
+
+func GetAccountsBalance(c *gin.Context) {
+	id := c.Param("id")
+
+	accounts, err := services.GetAccountBalance(id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch accounts"})
 		return

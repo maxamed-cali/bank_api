@@ -3,6 +3,7 @@ package controllers
 import (
 	"bank/services"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,4 +47,34 @@ func AssignRoles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Roles assigned successfully"})
+}
+
+type StatusToggleRequest struct {
+	IsActive bool `json:"is_active"`
+}
+func ActivateDeactivateUser(c *gin.Context) {
+	userIDStr := c.Param("id")
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	var req StatusToggleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON payload"})
+		return
+	}
+
+	err = services.ActivateDeactivateUser(uint(userID), req.IsActive)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	statusMsg := "deactivated"
+	if req.IsActive {
+		statusMsg = "activated"
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "User " + statusMsg + " successfully"})
 }

@@ -4,7 +4,6 @@ import (
 	"bank/db"
 	"bank/models"
 	"bank/websocket"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -60,37 +59,45 @@ func MoneyTransfer(tx *models.Transaction) error {
 		return errors.New("insufficient balance")
 	}
 
-	// Update balances
+	// Update sender balance
 	_, err = dbtx.Exec(`UPDATE accounts SET balance = balance - $1 WHERE account_number = $2`, tx.Amount, sender.AccountNumber)
 	if err != nil {
 		dbtx.Rollback()
 		return err
 	}
+
+	// Update receiver balance
 	_, err = dbtx.Exec(`UPDATE accounts SET balance = balance + $1 WHERE account_number = $2`, tx.Amount, receiver.AccountNumber)
 	if err != nil {
 		dbtx.Rollback()
 		return err
 	}
 
-	// Insert sender transaction
-	_, err = dbtx.Exec(`INSERT INTO transactions (account_id, to_account_id, transaction_type, amount, description, transaction_date)
-	                    VALUES ($1, $2, 'DEBIT', $3, $4, NOW())`,
+	// Insert sender transaction (DEBIT)
+	_, err = dbtx.Exec(`INSERT INTO transactions (account_id, to_account_id, transaction_type, amount, description, user_id, transaction_date)
+	                    VALUES ($1, $2, 'DEBIT', $3, $4, $5, NOW())`,
 		sender.AccountNumber, receiver.AccountNumber, tx.Amount,
-		fmt.Sprintf("Transferred to Account ID %s", receiver.AccountNumber))
+		fmt.Sprintf("Transferred to Account ID %s", receiver.AccountNumber), tx.UserID)
 	if err != nil {
 		dbtx.Rollback()
 		return err
 	}
 
-	// Insert receiver transaction
-	_, err = dbtx.Exec(`INSERT INTO transactions (account_id, to_account_id, transaction_type, amount, description, transaction_date)
-	                    VALUES ($1, $2, 'CREDIT', $3, $4, NOW())`,
+	// Log audit for sender debit action
+	_ = LogAudit(&sender.UserID, "CREATE", "transactions", sender.ID, fmt.Sprintf("Debited %.2f to %s", tx.Amount, receiver.AccountNumber))
+
+	// Insert receiver transaction (CREDIT)
+	_, err = dbtx.Exec(`INSERT INTO transactions (account_id, to_account_id, transaction_type, amount, description, user_id, transaction_date)
+	                    VALUES ($1, $2, 'CREDIT', $3, $4, $5, NOW())`,
 		receiver.AccountNumber, sender.AccountNumber, tx.Amount,
-		fmt.Sprintf("Received from Account ID %s", sender.AccountNumber))
+		fmt.Sprintf("Received from Account ID %s", sender.AccountNumber), tx.UserID)
 	if err != nil {
 		dbtx.Rollback()
 		return err
 	}
+
+	// Log audit for receiver credit action
+	_ = LogAudit(&receiver.UserID, "CREATE", "transactions", receiver.ID, fmt.Sprintf("Credited %.2f from %s", tx.Amount, sender.AccountNumber))
 
 	// Insert notification
 	message := fmt.Sprintf("You received %.2f from %s", tx.Amount, sender.AccountNumber)
@@ -114,6 +121,7 @@ func MoneyTransfer(tx *models.Transaction) error {
 
 	return nil
 }
+
 
 
 func MoneyRequest(request *models.MoneyRequest) error {
@@ -140,18 +148,20 @@ func MoneyRequest(request *models.MoneyRequest) error {
 	}()
 
 	// Insert money request
-	_, err = dbtx.Exec(`
+	var requestID uint
+	err = dbtx.QueryRow(`
 		INSERT INTO money_requests 
-			(requester_id, recipient_id, amount, status, expires_at, requeste_at)
+			(requester_id, recipient_id, amount, status,user_id, expires_at, requeste_at)
 		VALUES 
-			($1, $2, $3, $4,  NOW(), NOW())
-	`, request.RequesterID, request.RecipientID, request.Amount, request.Status)
+			($1, $2, $3, $4,$5,  NOW(), NOW())
+		RETURNING id
+	`, request.RequesterID, request.RecipientID, request.Amount, request.Status,request.UserID).Scan(&requestID)
 	if err != nil {
 		dbtx.Rollback()
 		return err
 	}
 
-	// Get recipient account
+	// Get recipient account user ID
 	var recipientUserID uint
 	err = dbtx.QueryRow(`
 		SELECT user_id FROM accounts WHERE account_number = $1
@@ -160,6 +170,9 @@ func MoneyRequest(request *models.MoneyRequest) error {
 		dbtx.Rollback()
 		return fmt.Errorf("recipient account not found: %v", err)
 	}
+
+	// Log audit for the money request creation
+	_ = LogAudit(nil, "CREATE", "money_requests", requestID, fmt.Sprintf("Money request of %.2f from %s to %s", request.Amount, request.RequesterID, request.RecipientID))
 
 	// Commit the transaction
 	if err := dbtx.Commit(); err != nil {
@@ -175,6 +188,7 @@ func MoneyRequest(request *models.MoneyRequest) error {
 
 	return nil
 }
+
 
 func AcceptMoneyRequest(requestID uint) error {
 	dbtx, err := db.DB.Begin()
@@ -362,90 +376,74 @@ func AutoExpireRequests() {
 
 
 
-func GetTransactionByID(id uint) (*models.Transaction, error) {
-	// Prepare the query to fetch the transaction
-	query := `SELECT id, account_id, to_account_id, amount, transaction_type, description, created_at 
-			  FROM transactions 
-			  WHERE id = $1 
-			  LIMIT 1`
-
-	// Create an instance to hold the result
-	var tx models.Transaction
-
-	// Execute the query
-	err := db.DB.QueryRow(query, id).Scan(
-		&tx.ID,
-		&tx.AccountID,
-		&tx.ToAccountID,
-		&tx.Amount,
-		&tx.TransactionType,
-		&tx.Description,
-		
-	)
-
-	if err != nil {
-		// Check if no rows were found (no transaction)
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("transaction with id %d not found", id)
-		}
-		// Handle any other error
-		log.Println("Error executing query:", err)
-		return nil, err
-	}
-
-	return &tx, nil
+type TransactionFilter struct {
+	UserID          *uint
+	AccountID       *string
+	TransactionType *string
+	MinAmount       *float64
+	MaxAmount       *float64
+	StartDate       *time.Time
+	EndDate         *time.Time
+	DescriptionLike *string
 }
 
-func GetAllTransactions() ([]models.Transaction, error) {
-	var txs []models.Transaction
+func GetTransactionHistory(filter TransactionFilter) ([]models.Transaction, error) {
+	baseQuery := `SELECT id, user_id, account_id, transaction_type, to_account_id, amount, transaction_date, description FROM transactions WHERE 1=1`
+	var params []interface{}
+	var conditions string
 
-	// Prepare the SQL query to fetch all transactions
-	query := `SELECT id, account_id, to_account_id, amount, transaction_type, description, created_at, updated_at FROM transactions`
+	if filter.UserID != nil {
+		params = append(params, *filter.UserID)
+		conditions += fmt.Sprintf(" AND user_id = $%d", len(params))
+	}
+	if filter.AccountID != nil {
+		params = append(params, *filter.AccountID)
+		conditions += fmt.Sprintf(" AND account_id = $%d", len(params))
+	}
+	if filter.TransactionType != nil {
+		params = append(params, *filter.TransactionType)
+		conditions += fmt.Sprintf(" AND transaction_type = $%d", len(params))
+	}
+	if filter.MinAmount != nil {
+		params = append(params, *filter.MinAmount)
+		conditions += fmt.Sprintf(" AND amount >= $%d", len(params))
+	}
+	if filter.MaxAmount != nil {
+		params = append(params, *filter.MaxAmount)
+		conditions += fmt.Sprintf(" AND amount <= $%d", len(params))
+	}
+	if filter.StartDate != nil {
+		params = append(params, *filter.StartDate)
+		conditions += fmt.Sprintf(" AND transaction_date >= $%d", len(params))
+	}
+	if filter.EndDate != nil {
+		params = append(params, *filter.EndDate)
+		conditions += fmt.Sprintf(" AND transaction_date <= $%d", len(params))
+	}
+	if filter.DescriptionLike != nil {likePattern := "%" + *filter.DescriptionLike + "%"
+		params = append(params, likePattern)
+		conditions += fmt.Sprintf(" AND description ILIKE $%d", len(params))
+	}
 
-	// Execute the query
-	rows, err := db.DB.Query(query)
+	fullQuery := baseQuery + conditions
+
+	rows, err := db.GetDB().Query(fullQuery, params...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch transactions: %v", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	// Loop through the rows and map them to the Transaction struct
+	var transactions []models.Transaction
 	for rows.Next() {
-		var tx models.Transaction
-		if err := rows.Scan(&tx.ID, &tx.AccountID, &tx.ToAccountID, &tx.Amount, &tx.TransactionType, &tx.Description); err != nil {
-			return nil, fmt.Errorf("failed to scan transaction: %v", err)
+		var t models.Transaction
+		err := rows.Scan(&t.ID, &t.UserID, &t.AccountID, &t.TransactionType, &t.ToAccountID, &t.Amount, &t.TransactionDate, &t.Description)
+		if err != nil {
+			return nil, err
 		}
-		txs = append(txs, tx)
+		transactions = append(transactions, t)
 	}
 
-	// Check for any error encountered during iteration
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating through rows: %v", err)
-	}
-
-	return txs, nil
-}
-func DeleteTransaction(id uint) error {
-    // Execute the DELETE query using raw SQL
-    result, err := db.DB.Exec(`
-        DELETE FROM transactions WHERE id = $1
-    `, id)
-
-    if err != nil {
-        return fmt.Errorf("failed to delete transaction: %v", err)
-    }
-
-    // Check if any rows were affected
-    rowsAffected, err := result.RowsAffected()
-    if err != nil {
-        return fmt.Errorf("failed to get affected rows: %v", err)
-    }
-
-    if rowsAffected == 0 {
-        return fmt.Errorf("transaction with ID %d not found", id)
-    }
-
-    return nil
+	return transactions, nil
 }
 
 

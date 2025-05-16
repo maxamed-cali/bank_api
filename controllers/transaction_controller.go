@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"bank/models"
 	"bank/services"
@@ -69,32 +70,50 @@ func DeclineMoneyRequest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Declined"})
 }
 
-func GetTransactionByID(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	tx, err := services.GetTransactionByID(uint(id))
+func GetTransactionHistoryHandler(c *gin.Context) {
+	var filter services.TransactionFilter
+
+	if userIDStr := c.Query("user_id"); userIDStr != "" {
+		if userID, err := strconv.Atoi(userIDStr); err == nil {
+			uid := uint(userID)
+			filter.UserID = &uid
+		}
+	}
+	if accountID := c.Query("account_id"); accountID != "" {
+		filter.AccountID = &accountID
+	}
+	if transactionType := c.Query("transaction_type"); transactionType != "" {
+		filter.TransactionType = &transactionType
+	}
+	if minAmountStr := c.Query("min_amount"); minAmountStr != "" {
+		if minAmount, err := strconv.ParseFloat(minAmountStr, 64); err == nil {
+			filter.MinAmount = &minAmount
+		}
+	}
+	if maxAmountStr := c.Query("max_amount"); maxAmountStr != "" {
+		if maxAmount, err := strconv.ParseFloat(maxAmountStr, 64); err == nil {
+			filter.MaxAmount = &maxAmount
+		}
+	}
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		if startDate, err := time.Parse("2006-01-02", startDateStr); err == nil {
+			filter.StartDate = &startDate
+		}
+	}
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		if endDate, err := time.Parse("2006-01-02", endDateStr); err == nil {
+			filter.EndDate = &endDate
+		}
+	}
+	if description := c.Query("description"); description != "" {
+		filter.DescriptionLike = &description
+	}
+
+	transactions, err := services.GetTransactionHistory(filter)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, tx)
-}
 
-func GetAllTransactions(c *gin.Context) {
-	txs, err := services.GetAllTransactions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
-		return
-	}
-	c.JSON(http.StatusOK, txs)
-}
-
-
-
-func DeleteTransaction(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	if err := services.DeleteTransaction(uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+	c.JSON(http.StatusOK, gin.H{"data": transactions})
 }
