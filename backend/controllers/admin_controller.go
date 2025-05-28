@@ -88,3 +88,33 @@ func GetUserList(c *gin.Context) {
     }
     c.JSON(http.StatusOK, users)
 }
+
+func GetAdminDashboard(c *gin.Context) {
+	// Extract userID from context (assumes middleware sets it)
+
+
+	// Call service to get dashboard summary
+	summary, err := services.GetAdminDashboardSummary()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Return the dashboard summary
+	c.JSON(http.StatusOK, gin.H{
+		"data": summary,
+	})
+}
+
+func GetMonthlyTransaction(c *gin.Context) {
+	
+
+	data, err := services.GetMonthlyTransaction()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}

@@ -101,7 +101,7 @@ export const navbarLinks: NavGroup[] = [
             {
                 label: "audit logs",
                 icon: BarChart,
-                path: "/customers",
+                path: "/logs",
                 role: "Admin",
             },
         ],

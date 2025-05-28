@@ -32,9 +32,24 @@ func LogAudit(userID *uint, actionType, tableName string, recordID uint, descrip
 // GetAllAuditLogs returns all audit logs ordered by timestamp (DESC)
 func GetAllAuditLogs() ([]models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, action_type, table_name, record_id, description, action_timestamp
-		FROM audit_logs
-		ORDER BY action_timestamp DESC
+		SELECT 
+			al.id,
+			al.user_id,
+			u.full_name,
+			a.account_number,
+			al.action_type,
+			al.table_name,
+			al.record_id,
+			al.description,
+			al.action_timestamp
+		FROM 
+			audit_logs al
+		LEFT JOIN 
+			users u ON al.user_id = u.id
+		LEFT JOIN 
+			accounts a ON a.user_id = u.id
+		ORDER BY 
+			al.action_timestamp DESC
 	`
 
 	rows, err := db.DB.Query(query)
@@ -48,10 +63,14 @@ func GetAllAuditLogs() ([]models.AuditLog, error) {
 	for rows.Next() {
 		var log models.AuditLog
 		var userID sql.NullInt64
+		var fullName sql.NullString
+		var accountNumber sql.NullString
 
 		err := rows.Scan(
 			&log.ID,
 			&userID,
+			&fullName,
+			&accountNumber,
 			&log.ActionType,
 			&log.TableName,
 			&log.RecordID,
@@ -65,8 +84,14 @@ func GetAllAuditLogs() ([]models.AuditLog, error) {
 		if userID.Valid {
 			uid := uint(userID.Int64)
 			log.UserID = &uid
-		} else {
-			log.UserID = nil
+		}
+
+		if fullName.Valid {
+			log.FullName = fullName.String
+		}
+
+		if accountNumber.Valid {
+			log.AccountNumber = accountNumber.String
 		}
 
 		logs = append(logs, log)

@@ -160,3 +160,66 @@ func GetUsersWithRoles() ([]dtos.UserWithRoleDTO, error) {
     return users, nil
 }
 
+func GetAdminDashboardSummary() (*dtos.DashboardSummary, error) {
+	var summary dtos.DashboardSummary
+
+	// 1. Total Wallet Balance
+	err := db.DB.QueryRow(`
+		SELECT COALESCE(SUM(balance), 0)
+		FROM accounts
+	`).Scan(&summary.WalletBalance)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Total Transactions
+	err = db.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM transactions
+	`).Scan(&summary.TotalTransactions)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Pending Money Requests
+	err = db.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM money_requests
+		WHERE status = 'pending'
+	`).Scan(&summary.PendingRequests)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Total Transfers (DEBIT)
+	err = db.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM transactions
+		WHERE transaction_type = 'DEBIT'
+	`).Scan(&summary.TotalTransfers)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. Total Sent Amount
+	err = db.DB.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0)
+		FROM transactions
+		WHERE transaction_type = 'DEBIT'
+	`).Scan(&summary.TotalSentAmount)
+	if err != nil {
+		return nil, err
+	}
+
+	// 6. Total Received Amount
+	err = db.DB.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0)
+		FROM transactions
+		WHERE transaction_type = 'CREDIT'
+	`).Scan(&summary.TotalReceivedAmount)
+	if err != nil {
+		return nil, err
+	}
+
+	return &summary, nil
+}

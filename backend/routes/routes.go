@@ -52,7 +52,11 @@ func AuthRoutes(r *gin.Engine) {
 		admin := api.Group("/admin")
 		admin.Use(middlewares.RoleMiddleware("Admin"))
 		{
-			
+
+			admin.GET("/transactions/history", controllers.GetTransactionHistoryHandler)
+			admin.GET("/accounts", controllers.GetAllAccounts)
+			admin.GET("/admindashboard/monthly-transactions", controllers.GetMonthlyTransaction)
+			admin.GET("/admindashboard/transactions-summary", controllers.GetAdminDashboard)
 			admin.POST("/assign-roles", controllers.AssignRoles)
 			admin.PUT("/users/:id/status", controllers.ActivateDeactivateUser)
 			admin.POST("/create-role", controllers.CreateRole)

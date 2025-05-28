@@ -6,10 +6,11 @@ export interface MoneyRequest {
   requester_id: string;
   recipient_id: string;
   Amount: number;
-  Status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  Status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
   ExpiresAt: string;
   RequesteAt: string;
   description?: string;
+  recipient_user_id: number;
 }
 
 export interface CreateMoneyRequestPayload {

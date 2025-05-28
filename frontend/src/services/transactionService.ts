@@ -20,6 +20,17 @@ export interface TransactionFilters {
   transaction_type?: 'DEBIT' | 'CREDIT';
 }
 
+function getCurrentUserRole(): string {
+  const userStr = localStorage.getItem('user');
+  if (!userStr) return 'User'; // default fallback
+  try {
+    const user = JSON.parse(userStr);
+    return user.role || 'User';
+  } catch {
+    return 'User';
+  }
+}
+
 export const transactionService = {
   async getUserTransactions(userId: number) {
     try {
@@ -43,14 +54,25 @@ export const transactionService = {
         queryParams.append('transaction_type', filters.transaction_type);
       }
 
-      const response = await axiosInstance.get<TransactionResponse>(
-        `/api/user/transactions/history?${queryParams.toString()}`
-      );
-      
-      return response.data.data;
+      const data = await transactionService.getTransactionHistory(queryParams);
+      return data;
     } catch (error: any) {
       console.error('Error fetching account transactions:', error.response?.data || error.message);
       throw error;
     }
+  },
+
+  getTransactionHistory: async (queryParams?: URLSearchParams) => {
+    const role = getCurrentUserRole();
+    let endpoint = "";
+
+    if (role === "Admin") {
+      endpoint = `/api/admin/transactions/history?${queryParams?.toString() || ""}`;
+    } else {
+      endpoint = `/api/user/transactions/history?${queryParams?.toString() || ""}`;
+    }
+
+    const response = await axiosInstance.get(endpoint);
+    return response.data.data || [];
   }
 }; 

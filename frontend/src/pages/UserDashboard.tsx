@@ -1,21 +1,26 @@
 import { recentSalesData } from "@/constants";
+import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from "react-router-dom";
+import { useSelector } from 'react-redux';
+import { RootState } from '@/store/store';
 import { useTheme } from "@/hooks/use-theme";
 import { Footer } from "@/layouts/footer";
-import { RootState } from '@/store/store';
 import {
     ArrowDownCircle,
     ArrowUpCircle,
     Clock,
     Repeat,
     Scale,
-    TrendingUp
+    TrendingUp,
+    MoreVertical
 } from "lucide-react";
-import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AccountRegistration, accountService } from '../services/accountService';
-import { dashboardService, Transaction } from '../services/dashboard';
+import { userDashboardService, DashboardData, ChartData, Transaction } from '../services/dashboardServices';
+import { moneyRequestService, MoneyRequest } from '../services/moneyRequestService';
+import { toast } from 'react-hot-toast';
+
+type RequestStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
 
 interface DashboardCardProps {
     icon: React.ReactNode;
@@ -23,6 +28,14 @@ interface DashboardCardProps {
     value: string;
     percentage: string;
     onClick?: () => void;
+}
+
+interface Sale {
+    id: number;
+    name: string;
+    email: string;
+    image: string;
+    total: number;
 }
 
 const DashboardCard: React.FC<DashboardCardProps> = ({ icon, title, value, percentage, onClick }) => (
@@ -43,26 +56,51 @@ const DashboardCard: React.FC<DashboardCardProps> = ({ icon, title, value, perce
     </div>
 );
 
-interface ChartData {
-    name: string;
-    total: number;
-}
+// Dropdown menu for actions
+const ActionDropdown = ({ onAccept, onDecline }: { onAccept: () => void; onDecline: () => void }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
 
-interface Sale {
-    id: number;
-    name: string;
-    email: string;
-    image: string;
-    total: number;
-}
+    React.useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
-interface Wallet {
-    id: string;
-    name: string;
-    balance: number;
-}
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                onClick={() => setOpen((o) => !o)}
+                aria-label="Actions"
+            >
+                <MoreVertical size={18} />
+            </button>
+            {open && (
+                <div className="absolute right-0 z-10 mt-2 w-32 rounded-lg bg-white shadow-lg border py-2">
+                    <button
+                        className="block w-full text-left px-4 py-2 font-bold text-success hover:bg-success/10"
+                        onClick={() => { setOpen(false); onAccept(); }}
+                    >
+                        Accept
+                    </button>
+                    <button
+                        className="block w-full text-left px-4 py-2 font-bold text-danger hover:bg-danger/10"
+                        onClick={() => { setOpen(false); onDecline(); }}
+                    >
+                        Decline
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
 
-const DashboardPage = () => {
+const UserDashboard = () => {
     const { theme } = useTheme();
     const navigate = useNavigate();
     const user = useSelector((state: RootState) => state.auth.user);
@@ -75,13 +113,42 @@ const DashboardPage = () => {
 
     const [accounts, setAccounts] = useState<AccountRegistration[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<AccountRegistration | undefined>();
-    const [dashboardData, setDashboardData] = useState<any>(null);
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [chartData, setChartData] = useState<ChartData[]>([]);
     const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
     const [transactionsLoading, setTransactionsLoading] = useState(true);
     const [transactionsError, setTransactionsError] = useState<string | null>(null);
+    const [recentRequests, setRecentRequests] = useState<MoneyRequest[]>([]);
+
+    const handleAccept = async (requestId: number) => {
+        try {
+            await moneyRequestService.acceptRequest(requestId);
+            toast.success('Money request accepted!');
+            // Refresh the requests list
+            if (user?.id) {
+                const data = await userDashboardService.getRecentRequests(user.id);
+                setRecentRequests(data);
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.error || 'Failed to accept request');
+        }
+    };
+
+    const handleReject = async (requestId: number) => {
+        try {
+            await moneyRequestService.rejectRequest(requestId);
+            toast.success('Money request rejected!');
+            // Refresh the requests list
+            if (user?.id) {
+                const data = await userDashboardService.getRecentRequests(user.id);
+                setRecentRequests(data);
+            }
+        } catch (error: any) {
+            toast.error(error?.response?.data?.error || 'Failed to reject request');
+        }
+    };
 
     useEffect(() => {
         fetchAccounts();
@@ -106,7 +173,7 @@ const DashboardPage = () => {
         async function fetchDashboard() {
             try {
                 setLoading(true);
-                const data = await dashboardService.getTransactionsSummary();
+                const data = await userDashboardService.getTransactionsSummary();
                 setDashboardData(data);
             } catch {
                 setError("Failed to load dashboard data");
@@ -120,7 +187,7 @@ const DashboardPage = () => {
     useEffect(() => {
         async function fetchChartData() {
             try {
-                const data = await dashboardService.getMonthlyTransactions();
+                const data = await userDashboardService.getMonthlyTransactions();
                 setChartData(data);
             } catch (err) {
                 console.error("Error fetching chart data:", err);
@@ -134,7 +201,7 @@ const DashboardPage = () => {
         async function fetchTransactions() {
             try {
                 setTransactionsLoading(true);
-                const data = await dashboardService.getTransactionHistory(user?.id || '');
+                const data = await userDashboardService.getTransactionHistory(user?.id || '');
                 setRecentTransactions(data);
             } catch (err) {
                 setTransactionsError("Failed to load transactions");
@@ -146,6 +213,30 @@ const DashboardPage = () => {
             fetchTransactions();
         }
     }, [user?.id]);
+
+    useEffect(() => {
+        async function fetchRecentRequests() {
+            if (!user?.id) {
+                console.log('No user ID available');
+                return;
+            }
+            try {
+                console.log('Fetching recent requests for user:', user.id);
+                const data = await userDashboardService.getRecentRequests(user.id);
+                console.log('Received recent requests data:', data);
+                setRecentRequests(data);
+            } catch (err) {
+                console.error("Error fetching recent requests:", err);
+                setRecentRequests([]);
+            }
+        }
+        fetchRecentRequests();
+    }, [user?.id]);
+
+    // Add a debug effect to monitor recentRequests state
+    useEffect(() => {
+        console.log('Current recentRequests state:', recentRequests);
+    }, [recentRequests]);
 
     return (
         <div className="flex flex-col gap-y-4">
@@ -205,20 +296,20 @@ const DashboardPage = () => {
                         <DashboardCard
                             icon={<Repeat size={26} />}
                             title="Total Transactions"
-                            value={dashboardData?.total_transactions ?? "—"}
-                            percentage={dashboardData?.total_transactions ?? "—"}
+                            value={dashboardData?.total_transactions?.toString() ?? "—"}
+                            percentage={dashboardData?.total_transactions?.toString() ?? "—"}
                         />
                         <DashboardCard
                             icon={<Clock size={26} />}
                             title="Pending Requests"
-                            value={dashboardData?.pending_requests ?? "—"}
-                            percentage={dashboardData?.pending_requests ?? "—"}
+                            value={dashboardData?.pending_requests?.toString() ?? "—"}
+                            percentage={dashboardData?.pending_requests?.toString() ?? "—"}
                         />
                         <DashboardCard
                             icon={<Repeat size={26} />}
                             title="Total Transfers"
-                            value={dashboardData?.total_transfers ?? "—"}
-                            percentage={dashboardData?.total_transfers ?? "—"}
+                            value={dashboardData?.total_transfers?.toString() ?? "—"}
+                            percentage={dashboardData?.total_transfers?.toString() ?? "—"}
                         />
                         <DashboardCard
                             icon={<ArrowUpCircle size={26} className="text-red-500 dark:text-red-400" />}
@@ -261,21 +352,69 @@ const DashboardPage = () => {
 
                 <div className="card col-span-1 md:col-span-2 lg:col-span-3">
                     <div className="card-header">
-                        <p className="card-title">Recent Sales</p>
+                        <p className="card-title">Recent Money Requests</p>
                     </div>
                     <div className="card-body h-[300px] overflow-auto p-0">
-                        {recentSalesData?.length ? recentSalesData.map((sale: Sale) => (
-                            <div key={sale.id} className="flex items-center justify-between gap-x-4 py-2 pr-2">
-                                <div className="flex items-center gap-x-4">
-                                    <img src={sale.image} alt={sale.name} className="size-10 flex-shrink-0 rounded-full object-cover" />
-                                    <div className="flex flex-col gap-y-2">
-                                        <p className="font-medium text-slate-900 dark:text-slate-50">{sale.name}</p>
-                                        <p className="text-sm text-slate-600 dark:text-slate-400">{sale.email}</p>
-                                    </div>
-                                </div>
-                                <p className="font-medium text-slate-900 dark:text-slate-50">{formatCurrency(sale.total)}</p>
-                            </div>
-                        )) : <p className="p-4 text-sm text-slate-500">No recent sales available.</p>}
+                        <div className="overflow-x-auto">
+                            <table className="w-full table-auto">
+                                <thead>
+                                    <tr className="bg-gray-2 text-left dark:bg-meta-4">
+                                        <th className="py-4 px-4 font-medium text-black dark:text-white">
+                                            From Account
+                                        </th>
+                                        <th className="py-4 px-4 font-medium text-black dark:text-white">
+                                            Amount
+                                        </th>
+                                        <th className="py-4 px-4 font-medium text-black dark:text-white">
+                                            Status
+                                        </th>
+                                        <th className="py-4 px-4 font-medium text-black dark:text-white">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {recentRequests && recentRequests.length > 0 ? (
+                                        recentRequests.map((request, index) => (
+                                            <tr key={`${request.ID}-${index}`}>
+                                                <td className="border-b border-[#eee] py-5 px-4 dark:border-strokedark">
+                                                    <p className="text-black dark:text-white">{request.requester_id}</p>
+                                                </td>
+                                                <td className="border-b border-[#eee] py-5 px-4 dark:border-strokedark">
+                                                    <p className="text-black dark:text-white">${request.Amount.toFixed(2)}</p>
+                                                </td>
+                                                <td className="border-b border-[#eee] py-5 px-4 dark:border-strokedark">
+                                                    <span className={`inline-flex rounded-full bg-opacity-10 py-1 px-3 text-sm font-medium ${
+                                                        {
+                                                            'ACCEPTED': 'bg-success text-success',
+                                                            'REJECTED': 'bg-danger text-danger',
+                                                            'EXPIRED': 'bg-gray-500 text-gray-500',
+                                                            'PENDING': 'bg-warning text-warning'
+                                                        }[request.Status] || 'bg-gray-500 text-gray-500'
+                                                    }`}>
+                                                        {request.Status}
+                                                    </span>
+                                                </td>
+                                                <td className="border-b border-[#eee] py-5 px-4 dark:border-strokedark relative">
+                                                    {request.Status === 'PENDING' && (
+                                                        <ActionDropdown
+                                                            onAccept={() => handleAccept(request.ID)}
+                                                            onDecline={() => handleReject(request.ID)}
+                                                        />
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={4} className="p-4 text-center text-sm text-slate-500">
+                                                No money requests available.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -344,4 +483,4 @@ const DashboardPage = () => {
     );
 };
 
-export default DashboardPage;
+export default UserDashboard; 

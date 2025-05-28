@@ -48,6 +48,13 @@ export const accountService = {
     return response.data;
   },
 
+  // Get all account registrations
+  async getAllByAdmin(): Promise<AccountRegistration[]> {
+   
+    const response = await axiosInstance.get(`/api/admin/accounts`);
+    return response.data
+  },
+
   // Get single account registration
   async getById(id: string) {
     try {

@@ -7,7 +7,7 @@ interface AuthState {
     fullName?: string;
     email?: string;
     phone?: string;
-    role: 'admin' | 'user';
+    role: 'Admin' | 'User';
   } | null;
   token: string | null;
   isAuthenticated: boolean;

@@ -3,23 +3,28 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { ThemeProvider } from './contexts/theme-context';
 import { store } from './store/store';
 import MainLayout from './layouts/main-layout';
-import DashboardPage from './pages/Dashboard';
+import UserDashboard from './pages/UserDashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import Auth from './pages/Auth';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Toaster } from 'react-hot-toast';
 import NotificationsPage from './pages/NotificationsPage';
 import WebSocketInitializer from './components/WebSocketInitializer';
 import UserManagement from './pages/UserManagement';
-
-// Import your other components here
-// import Dashboard from './pages/Dashboard';
+import LogsPage from './pages/LogsPage';
 import AccountRegistration from './pages/AccountRegistration';
 import TransferFundsPage from './pages/TransferFundsPage';
 import MoneyRequestPage from './pages/MoneyRequestPage';
 import TransactionHistoryPage from './pages/TransactionHistory';
 import RoleAssignment from './pages/RoleAssignment';
+import { useSelector } from 'react-redux';
+import { RootState } from './store/store';
 
-function App() {
+// Create a separate component for the router
+const AppRouter = () => {
+  const user = useSelector((state: RootState) => state.auth.user);
+  const isAdmin = user?.role === 'Admin';
+
   const router = createBrowserRouter([
     {
       path: "/auth",
@@ -35,7 +40,7 @@ function App() {
       children: [
         {
           index: true,
-          element: <DashboardPage />,
+          element: isAdmin ? <AdminDashboard /> : <UserDashboard />,
         },
         {
           path: "notifications",
@@ -47,11 +52,11 @@ function App() {
         },
         {
           path: "Assign",
-          element: <RoleAssignment /> ,
+          element: <RoleAssignment />,
         },
         {
-          path: "reports",
-          element: <h1 className="title">Role Assing</h1>,
+          path: "logs",
+          element: <LogsPage />,
         },
         {
           path: "account-registration",
@@ -73,21 +78,20 @@ function App() {
           path: "settings",
           element: <h1 className="title">Settings</h1>,
         },
-        {
-          path: "settings",
-          element: <h1 className="title">Settings</h1>,
-        },
       ],
     },
   ]);
 
+  return <RouterProvider router={router} />;
+};
 
+function App() {
   return (
     <Provider store={store}>
       <ThemeProvider storageKey="theme">
         <Toaster position="top-right" />
         <WebSocketInitializer />
-        <RouterProvider router={router} />
+        <AppRouter />
       </ThemeProvider> 
     </Provider>
   );

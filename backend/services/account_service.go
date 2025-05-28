@@ -166,3 +166,42 @@ func GetUserByAccountNumber( accountNumber string) (*dtos.AccoutResponse, error)
     }
     return &user, nil
 }
+
+
+func GetMonthlyTransaction() ([]dtos.MonthlyTransactionVolume, error) {
+	query := `
+		WITH months AS (
+			SELECT generate_series(1, 12) AS month_number
+		),
+		monthly_data AS (
+			SELECT 
+				EXTRACT(MONTH FROM transaction_date)::int AS month_number,
+				SUM(amount) AS total_volume
+			FROM transactions
+			GROUP BY month_number
+		)
+		SELECT 
+			TO_CHAR(TO_DATE(m.month_number::text, 'MM'), 'Mon') AS month,
+			COALESCE(md.total_volume, 0) AS total_volume
+		FROM months m
+		LEFT JOIN monthly_data md ON m.month_number = md.month_number
+		ORDER BY m.month_number;
+	`
+
+	rows, err := db.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []dtos.MonthlyTransactionVolume
+	for rows.Next() {
+		var entry dtos.MonthlyTransactionVolume
+		if err := rows.Scan(&entry.Name, &entry.Total); err != nil {
+			return nil, err
+		}
+		results = append(results, entry)
+	}
+
+	return results, nil
+}
